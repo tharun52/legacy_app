@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <div class="col-md-8 col-md-offset-2">
+        <h2>My Todo List</h2>
+        <form method="POST" action="/add" style="margin-bottom:20px;">
+            <div class="input-group">
+                <input type="text" name="task" class="form-control" placeholder="Enter new task...">
+                <span class="input-group-btn">
+                    <button type="submit" class="btn btn-primary">Add Task</button>
+                </span>
+            </div>
+        </form>
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for todo in todos %}
+                <tr>
+                    <td>{{ todo['task'] }}</td>
+                    <td>{{ 'Done' if todo['done'] else 'Pending' }}</td>
+                    <td>
+                        {% if not todo['done'] %}
+                        <a href="/complete/{{ todo['id'] }}" class="btn btn-xs btn-success">Complete</a>
+                        {% endif %}
+                        <a href="/delete/{{ todo['id'] }}" class="btn btn-xs btn-danger">Delete</a>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

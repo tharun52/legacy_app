@@ -1,0 +1,13 @@
+[Unit]
+Description=Legacy Todo App
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/todo_app
+ExecStart=/usr/bin/python2.7 /home/ubuntu/todo_app/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
