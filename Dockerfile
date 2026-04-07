@@ -5,16 +5,18 @@ FROM python:3.11-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Disable pip's rich progress bar — prevents thread errors on older kernels
+    PIP_PROGRESS_BAR=off
 
 # ── Stage 2: dependencies ────────────────────────────────────────────────────
 FROM base AS deps
 
 WORKDIR /app
 
-# Install dependencies in a separate layer for better caching
+# Install dependencies — progress bar disabled via PIP_PROGRESS_BAR=off env var
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --progress-bar off -r requirements.txt
 
 # ── Stage 3: final image ─────────────────────────────────────────────────────
 FROM base AS final
