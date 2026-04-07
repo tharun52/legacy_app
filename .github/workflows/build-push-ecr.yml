@@ -24,8 +24,8 @@ jobs:
       # ── 1. Checkout — pure git, no Node.js action needed ──────────────────
       - name: Checkout code
         run: |
-          # Clean workspace
-          rm -rf ./* ./.git 2>/dev/null || true
+          # Wipe everything including dotfiles (.dockerignore, .github, .gitignore etc.)
+          find . -mindepth 1 -maxdepth 1 ! -name '.' -exec rm -rf {} + 2>/dev/null || true
 
           git init
           git remote add origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
