@@ -46,12 +46,18 @@ def hash_password(password):
     return hashlib.md5(password.encode('utf-8')).hexdigest()
 
 
+# ── Initialize DB at startup ──────────────────────────────────────────────────
+# Called at module level so it runs whether started via Gunicorn or directly.
+# CREATE TABLE IF NOT EXISTS is idempotent — safe to call every startup.
+with app.app_context():
+    init_db()
+
+
 @app.route('/')
 def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     db = get_db()
-    # Parameterized query — no SQL injection
     todos = db.execute(
         'SELECT * FROM todos WHERE user_id = ?',
         (session['user_id'],)
@@ -162,7 +168,4 @@ def health():
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        init_db()
-    # debug=False — never run debug mode in production
     app.run(host='0.0.0.0', port=5000, debug=False)
