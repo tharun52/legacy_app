@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  todo-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todo-app
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      # Override SECRET_KEY with a strong random value in production
+      # Generate one with: python3 -c "import secrets; print(secrets.token_hex(32))"
+      - SECRET_KEY=${SECRET_KEY:-change-me-use-a-real-secret-in-production}
+      - DATABASE_PATH=/app/data/todo.db
+
+    volumes:
+      # Named volume ensures SQLite data persists across container restarts
+      - todo_data:/app/data
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Security: drop all capabilities, read-only root filesystem
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  todo_data:
+    driver: local
