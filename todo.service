@@ -1,13 +1,16 @@
 [Unit]
-Description=Legacy Todo App
-After=network.target
+Description=Legacy Todo App (containerized)
+After=network.target docker.service
+Requires=docker.service
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/todo_app
-ExecStart=/usr/bin/python2.7 /home/ubuntu/todo_app/app.py
+WorkingDirectory=/home/ubuntu/legacy_app
+ExecStartPre=-/usr/bin/docker compose down
+ExecStart=/usr/bin/docker compose up
+ExecStop=/usr/bin/docker compose down
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target

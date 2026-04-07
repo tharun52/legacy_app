@@ -1,0 +1,114 @@
+name: Build and Push to ECR
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - 'containerize/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# ── Global env ────────────────────────────────────────────────────────────────
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: legacy-app
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Image to ECR
+    runs-on: test_runner
+
+    steps:
+      # ── 1. Checkout — pure git, no Node.js action needed ──────────────────
+      - name: Checkout code
+        run: |
+          # Wipe everything including dotfiles (.dockerignore, .github, .gitignore etc.)
+          find . -mindepth 1 -maxdepth 1 ! -name '.' -exec rm -rf {} + 2>/dev/null || true
+
+          git init
+          git remote add origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+
+          # For PRs checkout the head ref, for pushes use the branch
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin refs/pull/${{ github.event.pull_request.number }}/head:pr-branch
+            git checkout pr-branch
+          else
+            git fetch origin ${{ github.ref_name }}
+            git checkout ${{ github.ref_name }}
+          fi
+
+          echo "Checked out commit: $(git rev-parse HEAD)"
+          echo "GIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+      # ── 2. Verify AWS identity (uses EC2 instance role — no static keys) ──
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity --region ${{ env.AWS_REGION }}
+
+      # ── 3. Create ECR repository if it does not already exist ─────────────
+      - name: Create ECR repository if not exists
+        run: |
+          aws ecr describe-repositories \
+            --repository-names ${{ env.ECR_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+          || aws ecr create-repository \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+
+          REGISTRY=$(aws ecr describe-repositories \
+            --repository-names ${{ env.ECR_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'repositories[0].repositoryUri' \
+            --output text | sed 's|/.*||')
+
+          echo "ECR_REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          echo "FULL_IMAGE=$REGISTRY/${{ env.ECR_REPOSITORY }}" >> $GITHUB_ENV
+          echo "Registry: $REGISTRY"
+
+      # ── 4. Login to ECR — pure AWS CLI, no Node.js action ─────────────────
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+            | docker login \
+                --username AWS \
+                --password-stdin ${{ env.ECR_REGISTRY }}
+          echo "Docker logged in to ECR successfully"
+
+      # ── 5. Build Docker image ──────────────────────────────────────────────
+      - name: Build Docker image
+        run: |
+          echo "Building: ${{ env.FULL_IMAGE }}:${{ env.GIT_SHA }}"
+          docker build \
+            --tag ${{ env.FULL_IMAGE }}:${{ env.GIT_SHA }} \
+            --tag ${{ env.FULL_IMAGE }}:latest \
+            --file Dockerfile \
+            .
+          echo "Build complete"
+          docker images ${{ env.FULL_IMAGE }}
+
+      # ── 6. Push both tags to ECR ───────────────────────────────────────────
+      - name: Push image to ECR
+        run: |
+          echo "Pushing ${{ env.FULL_IMAGE }}:${{ env.GIT_SHA }}"
+          docker push ${{ env.FULL_IMAGE }}:${{ env.GIT_SHA }}
+
+          echo "Pushing ${{ env.FULL_IMAGE }}:latest"
+          docker push ${{ env.FULL_IMAGE }}:latest
+
+      # ── 7. Summary ────────────────────────────────────────────────────────
+      - name: Print image summary
+        run: |
+          echo "============================================"
+          echo "  ✅ Image pushed successfully to ECR!"
+          echo "  SHA tag : ${{ env.FULL_IMAGE }}:${{ env.GIT_SHA }}"
+          echo "  Latest  : ${{ env.FULL_IMAGE }}:latest"
+          echo "============================================"
+          aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'sort_by(imageDetails, &imagePushedAt)[-1].{digest:imageDigest,pushed:imagePushedAt,tags:imageTags}' \
+            --output table
